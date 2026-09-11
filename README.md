@@ -6,6 +6,7 @@ Downloadable source for the student database application. This edition uses stan
 
 ## Included
 
+- Batch-first registration: create a course and batch, then register students directly inside that batch.
 - Course types and batches, with teachers, schedules and capacity.
 - Student names, contact details, campus and permanent student IDs.
 - Listening, Reading, Writing and Speaking levels; estimated bands and assessment history.
@@ -46,7 +47,7 @@ npm start
 | --- | --- |
 | `app/` | Next.js pages, styling and public database configuration endpoint |
 | `features/desk/` | Student, course, batch, filter and PDF workflows |
-| `supabase/migrations/` | Two database migrations, applied in filename order |
+| `supabase/migrations/` | Database migrations, applied in filename order |
 | `supabase/setup/first-administrator.sql` | One-time administrator and first-campus setup |
 | `public/fonts/` | Bundled report fonts and their licenses |
 | `vercel.json` | Vercel framework, install and build settings |

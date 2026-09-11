@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const db=new PGlite();let checks=0;
 const q=(sql,args=[])=>db.query(sql,args);
 await db.exec(`create schema auth;create role anon nologin;create role authenticated nologin;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;`);
-for(const path of ['202609110001_student_desk.sql','202609110002_student_desk_rpc.sql']){
+for(const path of ['202609110001_student_desk.sql','202609110002_student_desk_rpc.sql','20260911180723_require_batch_for_new_students.sql']){
  // PGlite has gen_random_uuid built in; Supabase's pgcrypto extension is not needed in this test runtime.
  const sql=(await readFile('supabase/migrations/'+path,'utf8')).replace('create extension if not exists pgcrypto;','');
  try{await db.exec(sql)}catch(e){console.error('Migration failed',path,e.message,e.cause||'');process.exit(1)}
@@ -23,9 +23,11 @@ await as('admin');
 const course=(await write('save_course',{name:'IELTS Premium',short_code:'IP',default_duration_days:90})).id;
 const batch=(await write('save_batch',{course_type_id:course,branch_id:a,batch_code:'IP-TEST',teacher_id:ids.teacher,status:'running',maximum_capacity:3})).id;
 const batch2=(await write('save_batch',{course_type_id:course,branch_id:a,batch_code:'IP-SECOND',status:'running',maximum_capacity:1})).id;
+const otherBranchBatch=(await write('save_batch',{course_type_id:course,branch_id:b,batch_code:'IP-OTHER',status:'running',maximum_capacity:3})).id;
 const core=(name,phone,branch=a)=>({full_name:name,primary_phone:phone,primary_branch_id:branch,status:'active',joining_date:'2026-09-11'});
 const student=(await write('create_student',{core:core('Test Student','01711111111'),batch_id:batch,goal:{target_overall:7,destination_country:'Canada',intended_intake:'2027-09'},plan:{registration_status:'promised',promised_registration_date:'2026-09-01'},assessment:{levels:{listening:3,reading:3,writing:2,speaking:4},bands:{listening:6.5},observation:'বাংলা পর্যবেক্ষণ'}})).id;
-const second=(await write('create_student',{core:core('Other Branch','01722222222',b)})).id;
+await rejects(()=>write('create_student',{core:core('No Batch','01799999999')}),/Choose a batch/);
+const second=(await write('create_student',{core:core('Other Branch','01722222222',b),batch_id:otherBranchBatch})).id;
 let s=(await snap()).students.find(s=>s.id===student);assert.equal(s.primary_phone,'+8801711111111');assert.equal(s.assessments[0].levels.writing,2);assert.equal(s.enrollments.length,1);checks+=3;
 await rejects(()=>write('create_student',{core:core('Duplicate','+8801711111111')}),/already exists/);
 await rejects(()=>write('create_student',{core:{...core('Cross field duplicate','01733333333'),secondary_phone:'008801711111111'}}),/already exists/);
@@ -58,5 +60,5 @@ assert.equal((await q('select count(*)::integer n from public.student_ielts_goal
 assert.equal((await q('select count(*)::integer n from public.exam_plans where student_id=$1',[student])).rows[0].n,2);checks++;
 assert.equal((await q('select count(*)::integer n from public.student_assessments where student_id=$1',[student])).rows[0].n,2);checks++;
 assert.ok((await q('select count(*)::integer n from public.audit_logs')).rows[0].n>10);checks++;
-console.log(`PASS: ${checks} database checks, including RLS, branch isolation, role restrictions, atomic rollback, history preservation, duplicate contacts, capacity and stale edits.`);
+console.log(`PASS: ${checks} database checks, including required initial batches, RLS, branch isolation, role restrictions, atomic rollback, history preservation, duplicate contacts, capacity and stale edits.`);
 await db.close();

@@ -14,7 +14,7 @@ try {
     grant usage on schema auth to authenticated,anon;
     grant execute on function auth.uid() to authenticated,anon;
   `);
-  for (const file of ['202609110001_student_desk.sql', '202609110002_student_desk_rpc.sql']) {
+  for (const file of ['202609110001_student_desk.sql', '202609110002_student_desk_rpc.sql', '20260911180723_require_batch_for_new_students.sql']) {
     const sql = (await readFile('supabase/migrations/' + file, 'utf8'))
       .replace('create extension if not exists pgcrypto;', '');
     await db.exec(sql);

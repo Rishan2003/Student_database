@@ -6,12 +6,13 @@ The app runs on Vercel. Student data and staff accounts live in your Supabase pr
 
 Use a new, dedicated Supabase project for this application. These initial migrations create their own tables and are not intended to be pasted over an existing conflicting schema.
 
-In your Supabase project's **SQL Editor**, open and run these two files separately, in this order:
+In your Supabase project's **SQL Editor**, open and run these files separately, in this order:
 
 1. `supabase/migrations/202609110001_student_desk.sql`
 2. `supabase/migrations/202609110002_student_desk_rpc.sql`
+3. `supabase/migrations/20260911180723_require_batch_for_new_students.sql`
 
-Wait for the first file to finish successfully before running the second. Each file uses a transaction. Do not rerun a migration that already succeeded. The migrations create the tables, roles, access policies and application functions. They do not add sample students.
+Wait for each file to finish successfully before running the next. Each file uses a transaction. Do not rerun a migration that already succeeded. The migrations create the tables, roles, access policies and application functions. They do not add sample students.
 
 In Supabase's Data API settings, retain `public` as an exposed schema and keep `private` unexposed. The migrations explicitly grant the application the permissions it needs.
 
@@ -74,7 +75,7 @@ This script intentionally stops if a different active administrator already exis
 
 1. Create a course type in **Courses**.
 2. Add a batch for that course in **Batches**.
-3. Add a student, their enrollment, module levels and IELTS plans.
+3. Open that batch and use **Add student** to register each student inside it, including their module levels and IELTS plans.
 4. Reload the page and confirm the saved student remains.
 5. Apply student filters and export a summary or detailed PDF. The report includes all matching students, not only the visible table page.
 
@@ -85,7 +86,7 @@ Supabase enforces staff roles and campus permissions. Your Vercel URL does not i
 | What you see | What to check |
 | --- | --- |
 | Sample students / Setup pending | Check both Vercel environment variables and redeploy. Confirm the key is public. |
-| Missing `desk_snapshot` or `desk_write` function | Confirm both SQL migrations finished in the same project as `SUPABASE_URL`. |
+| Missing `desk_snapshot` or `desk_write` function | Confirm all SQL migrations finished in the same project as `SUPABASE_URL`. |
 | Account awaiting activation | Run first-administrator setup for your exact Auth email, or ask the existing app administrator to activate your staff account. |
 | Email confirmation opens the wrong website | Correct Supabase Site URL and allowed redirect URLs. |
 | The app signs in but courses and students are empty | A new database starts empty. Add your own courses, batches and students. |
