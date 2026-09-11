@@ -6,7 +6,7 @@
 begin;
 do $$
 declare
-  owner_email text := 'CHANGE_ME@example.com';
+  owner_email text := 'admin@example.com';
   owner_name text := 'HEXA’S Administrator';
   campus_name text := 'HEXA’S MajorTila';
   campus_code text := 'MT';
