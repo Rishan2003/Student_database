@@ -4,15 +4,20 @@ Downloadable source for the student database application. This edition uses stan
 
 **Start with [VERCEL_SETUP.md](./VERCEL_SETUP.md).** It explains deployment, connecting the database, and activating your administrator account.
 
+**Updating an existing installation?** Read [UPDATE_NOTES.md](./UPDATE_NOTES.md) for club attendance, student reviews and the migrations needed for your version.
+
 ## Included
 
 - Batch-first registration: create a course and batch, then register students directly inside that batch.
 - Course types and batches, with teachers, schedules and capacity.
+- Daily club attendance: paste AI-extracted names and batches, check matches, and view attendance by batch and date. See [CLUB_ATTENDANCE.md](./CLUB_ATTENDANCE.md).
 - Student names, contact details, campus and permanent student IDs.
 - Listening, Reading, Writing and Speaking levels; estimated bands and assessment history.
 - Target scores, country, intake, planned test dates, registration promises and registration confirmation.
 - Multiple institute enrollments and previous courses at other institutes.
 - Teacher observations and role-controlled notes.
+- Student category, current module states and faculty's expected overall band.
+- Four separate weekly meeting records per HICU/CD-HICU enrollment, included in detailed PDF reports.
 - Combined student filters and PDF export of every matching student, including results beyond the current table page.
 - Summary and detailed PDF layouts with English and Bengali fonts.
 - Supabase sign-in, staff roles, campus access, database rules and audit history.
@@ -65,6 +70,8 @@ npm run test:database
 npm run test:bootstrap
 npm run test:config
 npm run test:reports
+npm run test:reviews
+npm run test:clubs
 ```
 
 The database checks run in an isolated PostgreSQL test environment. They do not connect to or change your Supabase account. Remote Supabase behavior and a deployment in your Vercel account must be verified after setup.

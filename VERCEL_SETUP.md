@@ -2,6 +2,8 @@
 
 The app runs on Vercel. Student data and staff accounts live in your Supabase project. Follow these steps in order to enable real student saving.
 
+If your app is already running, use [UPDATE_NOTES.md](./UPDATE_NOTES.md). Apply only the additional migrations for the updates you have not installed, then redeploy.
+
 ## 1. Create the database
 
 Use a new, dedicated Supabase project for this application. These initial migrations create their own tables and are not intended to be pasted over an existing conflicting schema.
@@ -11,6 +13,8 @@ In your Supabase project's **SQL Editor**, open and run these files separately, 
 1. `supabase/migrations/202609110001_student_desk.sql`
 2. `supabase/migrations/202609110002_student_desk_rpc.sql`
 3. `supabase/migrations/20260911180723_require_batch_for_new_students.sql`
+4. `supabase/migrations/20260917153650_student_reviews_and_hicu_weeks.sql`
+5. `supabase/migrations/20260920191342_club_attendance.sql`
 
 Wait for each file to finish successfully before running the next. Each file uses a transaction. Do not rerun a migration that already succeeded. The migrations create the tables, roles, access policies and application functions. They do not add sample students.
 

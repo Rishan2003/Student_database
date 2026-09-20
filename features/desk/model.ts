@@ -27,6 +27,41 @@ export type Goal = z.infer<typeof goalSchema>;
 export type Plan = z.infer<typeof planSchema>;
 export type Levels = Record<Module, number | null>;
 export type Bands = Record<Module, number | null>;
+export const REVIEW_CATEGORIES = ['star_student', 'on_track', 'needs_attention', 'critical'] as const;
+export type ReviewCategory = typeof REVIEW_CATEGORIES[number];
+export const MODULE_STATES = ['on_track', 'needs_attention', 'critical'] as const;
+export type ModuleState = typeof MODULE_STATES[number];
+export type ModuleStates = Record<Module, ModuleState | null>;
+export const emptyModuleStates: ModuleStates = { listening: null, reading: null, writing: null, speaking: null };
+export const reviewNames: Record<ReviewCategory, string> = { star_student: 'Star Student', on_track: 'On track', needs_attention: 'Needs attention', critical: 'Critical' };
+export const reviewSchema = z.object({
+    category: z.enum(REVIEW_CATEGORIES, { errorMap: () => ({ message: 'Choose a student category.' }) }),
+    expected_band: band,
+    module_states: z.object({ listening: z.enum(MODULE_STATES).nullable(), reading: z.enum(MODULE_STATES).nullable(), writing: z.enum(MODULE_STATES).nullable(), speaking: z.enum(MODULE_STATES).nullable() }),
+});
+export type ReviewValues = z.infer<typeof reviewSchema>;
+export type ReviewDraft = Omit<ReviewValues, 'category'> & { category: ReviewCategory | '' };
+export interface StudentReview extends ReviewValues {
+    student_id: string;
+    updated_at: string;
+    updated_by: string;
+    author_name: string;
+}
+export const weeklyReviewSchema = reviewSchema.extend({
+    enrollment_id: z.string().min(1, 'Choose an HICU enrollment.'),
+    week: z.number().int().min(1).max(4),
+    review_date: optionalDate.refine(v => !!v, 'Enter the meeting date.'),
+    condition_notes: longText,
+    discussion: longText,
+    steps_taken: longText,
+});
+export interface WeeklyReview extends z.infer<typeof weeklyReviewSchema> {
+    id: string;
+    created_at: string;
+    updated_at: string;
+    updated_by: string;
+    author_name: string;
+}
 export interface Branch {
     id: string;
     name: string;
@@ -111,6 +146,8 @@ export interface Student extends Core {
     history: CourseHistory[];
     assessments: Assessment[];
     notes: Note[];
+    review?: StudentReview | null;
+    weekly_reviews?: WeeklyReview[];
 }
 export interface Staff {
     id: string;
@@ -127,7 +164,7 @@ export interface Snapshot {
     staff: Staff[];
     me: Staff | null;
 }
-export type View = 'students' | 'courses' | 'batches' | 'reports' | 'settings';
+export type View = 'students' | 'courses' | 'batches' | 'clubs' | 'reports' | 'settings';
 export interface Filters {
     search: string;
     branch: string;
@@ -162,6 +199,18 @@ export const canManage = (r?: Role) => !!r && ['super_admin', 'branch_manager', 
 export const canCore = (r?: Role) => canManage(r) || r === 'front_desk';
 export const canAcademic = (r?: Role) => canManage(r) || r === 'teacher';
 export const canIelts = (r?: Role) => canManage(r) || r === 'counselor';
+// Match the course code, or HICU as a complete word in its name (including CD-HICU).
+export const isHicuCourse = (course?: Course) => !!course && (
+    ['HICU', 'CDHICU'].includes(course.short_code.toUpperCase().replace(/[^A-Z0-9]/g, '')) ||
+    /(^|[^A-Z0-9])(?:CD[\s_-]*)?HICU($|[^A-Z0-9])/i.test(course.name)
+);
+export function hicuEnrollments(student: Student, data: Snapshot) {
+    return student.enrollments.filter(e => {
+        const batch = data.batches.find(b => b.id === e.batch_id);
+        return isHicuCourse(data.courses.find(c => c.id === batch?.course_type_id)) ||
+            (student.weekly_reviews || []).some(r => r.enrollment_id === e.id);
+    });
+}
 export function filterStudents(students: Student[], f: Filters, batches: Batch[]): Student[] {
     const q = f.search.toLocaleLowerCase().trim(), digits = normalizePhone(q);
     return students.filter(s => {

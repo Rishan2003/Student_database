@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const db=new PGlite();let checks=0;
 const q=(sql,args=[])=>db.query(sql,args);
 await db.exec(`create schema auth;create role anon nologin;create role authenticated nologin;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;grant usage on schema auth to authenticated,anon;grant execute on function auth.uid() to authenticated,anon;`);
-for(const path of ['202609110001_student_desk.sql','202609110002_student_desk_rpc.sql','20260911180723_require_batch_for_new_students.sql']){
+for(const path of ['202609110001_student_desk.sql','202609110002_student_desk_rpc.sql','20260911180723_require_batch_for_new_students.sql','20260917153650_student_reviews_and_hicu_weeks.sql','20260920191342_club_attendance.sql']){
  // PGlite has gen_random_uuid built in; Supabase's pgcrypto extension is not needed in this test runtime.
  const sql=(await readFile('supabase/migrations/'+path,'utf8')).replace('create extension if not exists pgcrypto;','');
  try{await db.exec(sql)}catch(e){console.error('Migration failed',path,e.message,e.cause||'');process.exit(1)}
@@ -60,5 +60,74 @@ assert.equal((await q('select count(*)::integer n from public.student_ielts_goal
 assert.equal((await q('select count(*)::integer n from public.exam_plans where student_id=$1',[student])).rows[0].n,2);checks++;
 assert.equal((await q('select count(*)::integer n from public.student_assessments where student_id=$1',[student])).rows[0].n,2);checks++;
 assert.ok((await q('select count(*)::integer n from public.audit_logs')).rows[0].n>10);checks++;
-console.log(`PASS: ${checks} database checks, including required initial batches, RLS, branch isolation, role restrictions, atomic rollback, history preservation, duplicate contacts, capacity and stale edits.`);
+// Faculty reviews and four-week HICU monitoring.
+await as('admin');
+async function reviewWrite(action, payload) { return (await q('select public.desk_save_review($1,$2) result', [action, payload])).rows[0].result; }
+const reviewValues = { category: 'needs_attention', expected_band: 6.5, module_states: { listening: 'on_track', reading: 'on_track', writing: 'critical', speaking: null }, updated_at: null };
+assert.equal((await snap()).students.find(s => s.id === student).review, null); checks++;
+assert.deepEqual((await snap()).students.find(s => s.id === student).weekly_reviews, []); checks++;
+await reviewWrite('save_student_review', { student_id: student, ...reviewValues });
+let currentReview = (await snap()).students.find(s => s.id === student).review;
+assert.equal(currentReview.expected_band, 6.5); assert.equal(currentReview.module_states.writing, 'critical'); assert.equal(currentReview.module_states.speaking, null); checks += 3;
+await rejects(() => reviewWrite('save_student_review', { student_id: student, ...reviewValues }), /Another staff/);
+await rejects(() => reviewWrite('save_student_review', { student_id: student, ...reviewValues, updated_at: currentReview.updated_at, expected_band: 6.3 }), /check constraint/);
+await rejects(() => reviewWrite('save_student_review', { student_id: student, ...reviewValues, updated_at: currentReview.updated_at, category: 'excellent' }), /check constraint/);
+await rejects(() => reviewWrite('save_student_review', { student_id: student, ...reviewValues, updated_at: currentReview.updated_at, module_states: { writing: 'invalid' } }), /check constraint/);
+await reviewWrite('save_student_review', { student_id: student, ...reviewValues, category: 'star_student', expected_band: 0, updated_at: currentReview.updated_at });
+currentReview = (await snap()).students.find(s => s.id === student).review;
+assert.equal(currentReview.category, 'star_student'); assert.equal(currentReview.expected_band, 0); checks += 2;
+await reviewWrite('save_student_review', { student_id: student, ...reviewValues, expected_band: null, updated_at: currentReview.updated_at });
+assert.equal((await snap()).students.find(s => s.id === student).review.expected_band, null); checks++;
+const hicu = (await write('save_course', { name: 'HICU', short_code: 'HICU', default_duration_days: 30 })).id;
+const cdHicu = (await write('save_course', { name: 'CD-HICU', short_code: 'CD-HICU', default_duration_days: 30 })).id;
+const hicuBatch = (await write('save_batch', { course_type_id: hicu, branch_id: a, batch_code: 'HICU-TEST', teacher_id: ids.teacher, status: 'running' })).id;
+const cdHicuBatch = (await write('save_batch', { course_type_id: cdHicu, branch_id: a, batch_code: 'CD-HICU-TEST', status: 'running' })).id;
+const hicuEnrollment = (await write('add_enrollment', { student_id: student, batch_id: hicuBatch, status: 'active' })).id;
+const cdEnrollment = (await write('add_enrollment', { student_id: student, batch_id: cdHicuBatch, status: 'active' })).id;
+const weekValues = { ...reviewValues, student_id: student, enrollment_id: hicuEnrollment, week: 1, review_date: '2026-09-17', condition_notes: 'Respectful; writing needs support.', discussion: 'Discussed essay planning.', steps_taken: 'Writing teacher: two care sessions.' };
+const firstWeek = (await reviewWrite('save_weekly_review', weekValues)).id;
+for (const week of [2, 3, 4]) await reviewWrite('save_weekly_review', { ...weekValues, week, category: 'on_track', discussion: `Week ${week} progress` });
+let weeks = (await snap()).students.find(s => s.id === student).weekly_reviews;
+assert.equal(weeks.length, 4); assert.equal(weeks[0].discussion, 'Discussed essay planning.'); assert.equal(weeks[3].week, 4); checks += 3;
+await rejects(() => reviewWrite('save_weekly_review', weekValues), /Another staff/);
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, week: 5 }), /Week 1, 2, 3 or 4/);
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, week: 0 }), /Week 1, 2, 3 or 4/);
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, week: 1.5 }), /invalid input/);
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, student_id: second }), /does not belong/);
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, enrollment_id: s.enrollments.find(e => e.batch_id === batch).id }), /HICU and CD-HICU/);
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, updated_at: weeks[0].updated_at, review_date: '' }), /not-null constraint/);
+await reviewWrite('save_weekly_review', { ...weekValues, enrollment_id: cdEnrollment, discussion: 'Separate CD-HICU intake.' });
+weeks = (await snap()).students.find(s => s.id === student).weekly_reviews;
+assert.equal(weeks.length, 5); assert.equal(weeks.filter(w => w.enrollment_id === hicuEnrollment).length, 4); checks += 2;
+currentReview = (await snap()).students.find(s => s.id === student).review;
+await reviewWrite('save_student_review', { student_id: student, ...reviewValues, category: 'on_track', expected_band: 7, updated_at: currentReview.updated_at });
+assert.equal((await snap()).students.find(s => s.id === student).weekly_reviews.find(w => w.id === firstWeek).category, 'needs_attention'); checks++;
+await as('teacher');
+let teacherSnapshot = await snap();
+assert.equal(teacherSnapshot.students.find(s => s.id === student).weekly_reviews.length, 4); checks++;
+const oldWeek = teacherSnapshot.students.find(s => s.id === student).weekly_reviews.find(w => w.id === firstWeek);
+await reviewWrite('save_weekly_review', { ...weekValues, discussion: 'Teacher follow-up saved.', updated_at: oldWeek.updated_at });
+assert.equal((await snap()).students.find(s => s.id === student).weekly_reviews.find(w => w.id === firstWeek).discussion, 'Teacher follow-up saved.'); checks++;
+await rejects(() => reviewWrite('save_weekly_review', { ...weekValues, enrollment_id: cdEnrollment }), /assigned enrollments/);
+await rejects(() => reviewWrite('save_student_review', { student_id: second, ...reviewValues }), /outside your access/);
+await rejects(() => q("insert into public.student_reviews(student_id,category) values($1,'on_track')", [second]), /permission denied/);
+await rejects(() => q("update public.student_weekly_reviews set discussion='bypass' where id=$1", [firstWeek]), /permission denied/);
+for (const role of ['viewer', 'front', 'counselor', 'pending', 'anon']) {
+  await as(role);
+  await rejects(() => reviewWrite('save_student_review', { student_id: student, ...reviewValues }), /cannot record|activated|permission denied/);
+  await rejects(() => reviewWrite('save_weekly_review', weekValues), /cannot record|activated|permission denied/);
+}
+await as('admin');
+const savedWeek = (await snap()).students.find(s => s.id === student).weekly_reviews.find(w => w.id === firstWeek);
+assert.equal(savedWeek.discussion, 'Teacher follow-up saved.'); checks++;
+assert.equal((await snap()).students.find(s => s.id === student).weekly_reviews.find(w => w.week === 2 && w.enrollment_id === hicuEnrollment).discussion, 'Week 2 progress'); checks++;
+await write('update_enrollment', { id: hicuEnrollment, student_id: student, status: 'completed' });
+assert.equal((await snap()).students.find(s => s.id === student).weekly_reviews.filter(w => w.enrollment_id === hicuEnrollment).length, 4); checks++;
+await write('save_course', { id: hicu, name: 'Intensive Care (renamed)', short_code: 'IC', default_duration_days: 30 });
+await reviewWrite('save_weekly_review', { ...weekValues, updated_at: savedWeek.updated_at, discussion: 'Historical review remains editable after renaming.' });
+assert.equal((await snap()).students.find(s => s.id === student).weekly_reviews.find(w => w.id === firstWeek).discussion, 'Historical review remains editable after renaming.'); checks++;
+await db.exec('reset role');
+assert.equal((await q("select count(*)::int n from public.audit_logs where action='save_weekly_review' and old_values is not null")).rows[0].n, 2); checks++;
+assert.equal((await q("select count(*)::int n from pg_class where relname in ('student_reviews','student_weekly_reviews') and relrowsecurity")).rows[0].n, 2); checks++;
+console.log(`PASS: ${checks} database checks, including four-week persistence, independent enrollments, retained history, stale edits, permissions, RLS and existing student workflows.`);
 await db.close();

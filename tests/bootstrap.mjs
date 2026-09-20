@@ -14,18 +14,19 @@ try {
     grant usage on schema auth to authenticated,anon;
     grant execute on function auth.uid() to authenticated,anon;
   `);
-  for (const file of ['202609110001_student_desk.sql', '202609110002_student_desk_rpc.sql', '20260911180723_require_batch_for_new_students.sql']) {
+  for (const file of ['202609110001_student_desk.sql', '202609110002_student_desk_rpc.sql', '20260911180723_require_batch_for_new_students.sql','20260917153650_student_reviews_and_hicu_weeks.sql','20260920191342_club_attendance.sql']) {
     const sql = (await readFile('supabase/migrations/' + file, 'utf8'))
       .replace('create extension if not exists pgcrypto;', '');
     await db.exec(sql);
   }
   const source = await readFile('supabase/setup/first-administrator.sql', 'utf8');
-  const configured = email => source.replace("owner_email text := 'CHANGE_ME@example.com'", `owner_email text := '${email}'`);
+  // The exported setup script may already have an email filled in. Test with isolated fixtures.
+  const configured = email => source.replace(/owner_email text := '[^']*'/, `owner_email text := '${email}'`);
   async function rejects(sql, reason) {
     await assert.rejects(db.exec(sql), reason);
     await db.exec('rollback');
   }
-  await rejects(source, /Replace CHANGE_ME/);
+  await rejects(configured('CHANGE_ME@example.com'), /Replace CHANGE_ME/);
   await rejects(configured('owner@example.test'), /No Auth account/);
   assert.equal((await db.query('select count(*)::int n from public.branches')).rows[0].n, 0);
 

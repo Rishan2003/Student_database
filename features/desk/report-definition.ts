@@ -1,5 +1,6 @@
 import type { Content, ContentText, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { Student, Snapshot, MODULES, display, dateLabel, intakeLabel, examDate, registrationNames, isOverdue, hasInstituteHistory } from './model';
+import { reviewNames } from './model';
 function rich(value: unknown): ContentText { const s = value == null || value === '' ? '—' : String(value); return { text: (s.match(/[\u0964-\u0965\u0980-\u09ff\u200c\u200d]+|[^\u0964-\u0965\u0980-\u09ff\u200c\u200d]+/g) || ['—']).map(t => ({ text: t, font: /[\u0964-\u0965\u0980-\u09ff]/.test(t) ? 'Bengali' : 'Inter' })) }; }
 export function buildReport(students: Student[], data: Snapshot, filters: string[], details: boolean, title: string, demo = false): TDocumentDefinitions {
     const rows: Content[] = [{ text: 'HEXA’S  /  IELTS STUDENT DESK', fontSize: 10, bold: true, color: '#223c7b', margin: [0, 0, 0, 12] }, { ...rich(title || 'Student report'), fontSize: 24, bold: true, margin: [0, 0, 0, 6] }, rich(`${students.length} student${students.length === 1 ? '' : 's'}  ·  Generated ${new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'Asia/Dhaka' }).format(new Date())}`), { text: demo ? 'SAMPLE DATA — for preview only' : 'Confidential · Internal academic use', fontSize: 9, color: demo ? '#aa3e29' : '#65738b', margin: [0, 5, 0, 12] }, rich('Filters: ' + (filters.join('  |  ') || 'All students')), { text: ' ', margin: [0, 0, 0, 5] }];
@@ -25,6 +26,21 @@ export function buildReport(students: Student[], data: Snapshot, filters: string
             ]; }) : [['Enrollments', 'None recorded']]);
             section('Previous courses & institutes', s.history.length ? s.history.map(h => [h.institution_type === 'hexas' ? 'HEXA’S' : 'External institute', `${h.institution_name} · ${h.course_name}\n${h.batch_name} ${h.completion_date ? dateLabel(h.completion_date) : ''}\n${h.notes}`]) : [['History', 'None recorded']]);
             section('Module assessments & teacher observations', s.assessments.length ? s.assessments.map(a => [`${dateLabel(a.created_at.slice(0, 10))}\n${a.assessed_by}`, MODULES.map(m => `${display(m)}: level ${a.levels[m] ?? '—'}/5 · estimated band ${a.bands[m]?.toFixed(1) || '—'}`).join('\n') + '\n' + a.observation]) : [['Assessment', 'Not assessed']]);
+            if (s.review) section('Student review', [
+                ['Category', reviewNames[s.review.category]], ['Expected overall band', s.review.expected_band?.toFixed(1) ?? 'Not set'],
+                ...MODULES.map(m => [display(m), s.review!.module_states[m] ? reviewNames[s.review!.module_states[m]!] : 'Not assessed'] as [string, unknown]),
+            ]);
+            for (const week of [...(s.weekly_reviews || [])].sort((a, b) => a.enrollment_id.localeCompare(b.enrollment_id) || a.week - b.week)) {
+                const enrollment = s.enrollments.find(e => e.id === week.enrollment_id);
+                const batch = data.batches.find(b => b.id === enrollment?.batch_id);
+                section(`Weekly review: ${batch?.batch_code || 'HICU'} / Week ${week.week}`, [
+                    ['Meeting date', dateLabel(week.review_date)], ['Category', reviewNames[week.category]],
+                    ['Expected overall band', week.expected_band?.toFixed(1) ?? 'Not set'],
+                    ...MODULES.map(m => [display(m), week.module_states[m] ? reviewNames[week.module_states[m]!] : 'Not assessed'] as [string, unknown]),
+                    ['Condition & behaviour', week.condition_notes], ['Meeting discussion', week.discussion],
+                    ['Steps taken / next steps', week.steps_taken], ['Recorded by', week.author_name],
+                ]);
+            }
             section('Student notes', s.notes.length ? s.notes.map(n => [`${display(n.category)}\n${n.author_name}\n${dateLabel(n.created_at.slice(0, 10))}`, n.note]) : [['Notes', 'None recorded']]);
         });
     return { info: { title: title || 'Student report', author: 'HEXA’S' }, pageSize: 'A4', pageOrientation: details ? 'portrait' : 'landscape', pageMargins: [30, 30, 30, 40], defaultStyle: { font: 'Inter', fontSize: 10, color: '#182542' }, content: rows, footer: (current, total) => ({ text: `HEXA’S · ${demo ? 'SAMPLE DATA' : 'Confidential'}                      Page ${current} of ${total}`, fontSize: 8, color: '#65738b', alignment: 'center', margin: [30, 12, 30, 0] }) };

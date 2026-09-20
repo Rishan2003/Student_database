@@ -12,8 +12,10 @@
     "typecheck": "tsc --noEmit",
     "test:database": "node tests/database.mjs",
     "test:bootstrap": "node tests/bootstrap.mjs",
+    "test:reviews": "npm run test:reports && node tests/reviews.cjs",
     "test:reports": "tsc --outDir .tests-output --noEmit false --module commonjs --target es2021 --moduleResolution node --esModuleInterop true --skipLibCheck true features/desk/model.ts features/desk/demo.ts features/desk/report-definition.ts && node tests/reports-and-filters.cjs",
-    "test:config": "node tests/config.mjs"
+    "test:config": "node tests/config.mjs",
+    "test:clubs": "tsc --outDir .tests-output --noEmit false --module commonjs --target es2021 --moduleResolution node --esModuleInterop true --skipLibCheck true features/desk/model.ts features/desk/club-model.ts && node tests/clubs.cjs && node tests/clubs-database.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
