@@ -1,12 +1,19 @@
-# Club sheet matching update
+# Flexible club sheet matching
 
-Replace the existing application source with this package and redeploy the same Vercel project, keeping its Supabase environment variables.
-No additional database migration is required for this matching update.
+This package must replace the application source and be deployed to the existing Vercel project before the website changes. Keep the existing Supabase environment variables. No database migration is required for this frontend update.
 
-- Recognizes first names and consecutive shortened names when a single enrollment matches.
-- Recognizes PRE-122, 122 (PRE), PRE 122, PRE/122 and Bengali batch digits.
-- Keeps explicit course prefixes and separate number groups distinct.
-- Requires manual selection for ambiguous names or enrollments.
-- Labels short-name matches so staff can check the full selected name before saving.
+## Behavior
+- Auto-selects unique whole-word name matches, including omitted middle names, reordered names, and common Md/Mohammed title variations.
+- Accepts rearranged batch prefixes, batch labels, leading zeroes, Bengali digits and the saved full course name.
+- Offers up to five ranked suggestions for spelling differences, initials, joined names, missing batches and mismatched course labels. Suggestions require explicit selection before saving.
+- Preserves manual choice when more than one enrollment matches.
+- Adds per-row student search and sheet-name/batch editing with rechecking.
 
-Validation: existing club parsing/matching tests and added matching regression cases passed. Changed TypeScript/TSX files were transpiled successfully. A full production build was not run; the exact project dependencies were unavailable locally. Tests used TypeScript 5.9.3 and locally cached Zod 3.22.4 without changing package.json or package-lock.json.
+## Changed files
+features/desk/club-model.ts
+features/desk/club-attendance.tsx
+tests/clubs.cjs
+CLUB_ATTENDANCE.md
+
+## Validation
+All club parsing/matching regression tests passed, including suggestion confirmation and ambiguity cases. Strict TypeScript checking passed for the matcher and model; the UI TSX transpiled without syntax diagnostics. Validation used cached TypeScript 5.9.3 and Zod 3.22.4 without changing the project dependency manifests. A full production build and browser interaction test were not run because the exact application dependencies were unavailable locally.

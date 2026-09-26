@@ -37,8 +37,8 @@ Attendance follows the student: a student enrolled in two batches appears as att
 
 ## Checking and correcting
 
-- The app automatically matches only a unique name-and-batch pair. First names and consecutive parts of a full name are accepted only when exactly one enrollment matches. Check the displayed full name before saving. Misspellings and unclear text require a manual choice.
-- Batch variations such as `PRE-122`, `122 (PRE)`, `pre 122`, and `122` are accepted. Explicit course prefixes are respected; a number alone may require a manual choice across courses.
+- The app automatically matches only a unique name-and-batch pair. First names, omitted middle names, reordered whole name words and common Md/Mohammed title variations are accepted only when exactly one enrollment matches. Check the displayed full name before saving. Spelling differences and unclear text show suggested students for manual confirmation. Each row also offers student search and an edit/recheck action.
+- Batch variations such as `PRE-122`, `122 (PRE)`, `pre 122`, `PRE Batch No. 00122`, and `122` are accepted. Explicit course prefixes are respected; a number alone may require a manual choice across courses.
 - If two students have the same name and batch number, select the correct student using their full batch code and permanent student code. Check with staff when necessary.
 - A skipped row is not saved. You can resolve it and import it later.
 - Re-importing the same sheet is safe: each student is counted once per campus, module and day. Additional sheets add attendees without replacing earlier entries.

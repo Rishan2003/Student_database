@@ -58,5 +58,27 @@ assert.equal(matchClubRows([{ name: 'Farhan', batch: '301' }], roster)[0].enroll
 assert.equal(matchClubRows([{ name: 'Md.', batch: '301' }], roster)[0].enrollmentId, '');
 assert.equal(matchClubRows([{ name: 'রাফি', batch: '৩০২' }], roster)[0].enrollmentId, 'e4');
 assert.equal(match('Rafi', 'PRE-122', [...preRoster, { ...preRoster[0], enrollment_id: 'p3' }]).enrollmentId, '', 'Multiple enrollments need an explicit choice.');
-assert.match(match('Rafi', 'PRE-122').reason, /Short name/);
+assert.match(match('Rafi', 'PRE-122').reason, /Short.*name/);
 console.log('PASS: Short names, reordered batch codes, explicit prefixes, Bengali names/digits, and ambiguous enrollments.');
+assert.equal(matchClubRows([{ name: 'Mohammed Farhan Ahmed', batch: 'HICU 301' }], roster)[0].enrollmentId, 'e1');
+assert.equal(matchClubRows([{ name: 'Ahmed Farhan', batch: 'HICU 301' }], roster)[0].enrollmentId, 'e1');
+assert.equal(match('Rafi', 'PRE Batch No. 00122').enrollmentId, 'p1');
+assert.equal(match('Rafi', 'Preliminary 122', [{ ...preRoster[0], course_name: 'Preliminary' }]).enrollmentId, 'p1');
+for (const name of ['Rafy', 'Rafi Ahmd', 'RafiAhmed', 'R Ahmed']) {
+  const result = match(name, 'PRE-122');
+  assert.equal(result.enrollmentId, '', 'Spelling/initial guesses require confirmation');
+  assert.equal(result.suggestions[0].enrollmentId, 'p1', name);
+}
+assert.equal(match('Rafi Ahmed', 'XYZ-122').suggestions[0].enrollmentId, 'p1');
+assert.equal(match('Rafi Ahmed', '').enrollmentId, '');
+assert.equal(match('Rafi Ahmed', '').suggestions[0].enrollmentId, 'p1');
+assert.equal(match('Unknown Stranger', 'PRE-122').suggestions.length, 0);
+assert.equal(match('Md', 'PRE-122').suggestions.length, 0);
+assert.equal(match('Rafi', '122').suggestions.length, 2);
+assert.equal(match('Rafi?', 'PRE-122').enrollmentId, '');
+assert.equal(match('Rafi?', 'PRE-122').suggestions[0].enrollmentId, 'p1');
+console.log('PASS: Reordered names, common titles, batch labels/zeroes, course names, spelling suggestions and confirmation requirements.');
+const suggestedOnly = match('Rafy', 'PRE-122');
+assert.deepEqual(clubSelection([suggestedOnly], preRoster), { ids: [], unresolved: 1, skipped: 0, duplicates: 0 });
+assert.deepEqual(clubSelection([{ ...suggestedOnly, enrollmentId: suggestedOnly.suggestions[0].enrollmentId }], preRoster), { ids: ['p1'], unresolved: 0, skipped: 0, duplicates: 0 });
+console.log('PASS: Suggested students are excluded from saving until explicitly chosen.');

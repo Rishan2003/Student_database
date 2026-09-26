@@ -98,16 +98,16 @@ function ClubImportDialog({ data, demo, initialBranch, initialDate, onClose, onS
             onSaved(branch, date); onClose();
         } catch (e) { setError(failure(e)); } finally { setBusy(false); }
     };
-    const matchOptions = [{ value: '', label: 'Choose student' }, { value: '__skip', label: 'Skip this row' }, ...roster.map(r => ({ value: r.enrollment_id, label: `${r.full_name} · ${r.batch_code} · ${r.student_code} · ${r.enrollment_date}` }))];
+
     return <Dialog open onOpenChange={open => !open && !busy && onClose()}><DialogContent className="action-dialog club-import-dialog"><DialogHeader><DialogTitle>{rows ? 'Check the matches' : 'Import club sheet'}</DialogTitle><DialogDescription>{rows ? 'Check the names against the sheet. Choose the correct student or explicitly skip an unclear row.' : 'Extract names from your sheet photo with AI, then paste the result here.'}</DialogDescription></DialogHeader>
         <form onSubmit={e => { e.preventDefault(); void (rows ? save() : preview()); }}><fieldset disabled={busy} className="club-import-fields">
             {rows ? <>
                 <div className="club-import-session"><strong>{display(module)} club · {dateLabel(date)}</strong><span>{data.branches.find(b => b.id === branch)?.name}</span></div>
                 <p className="club-import-count" role="status">{selection.ids.length} {selection.ids.length === 1 ? 'student' : 'students'} ready · {selection.unresolved} to check · {selection.skipped} skipped{selection.duplicates ? ` · ${selection.duplicates} duplicate rows ignored` : ''}</p>
-                <div className="club-match-list">{rows.map((row, i) => <div key={i} className={`club-match-row ${!row.enrollmentId ? 'club-needs-match' : ''}`}><div><strong>{i + 1}. {row.name || 'Unreadable name'}</strong><small>Sheet batch: {row.batch || 'Unreadable'} · {row.enrollmentId === '__skip' ? 'Skipped' : row.reason}</small></div><Pick label={`Match row ${i + 1}`} value={row.enrollmentId} onChange={v => setRows(rows.map((r, index) => index === i ? { ...r, enrollmentId: v, reason: v ? 'Selected manually' : 'Choose the student' } : r))} options={matchOptions} />{row.enrollmentId && row.enrollmentId !== '__skip' && <small>Student ID: {roster.find(r => r.enrollment_id === row.enrollmentId)?.student_code}</small>}</div>)}</div>
+                <div className="club-match-list">{rows.map((row, i) => <ClubMatchEditor key={i} row={row} index={i} roster={roster} onChange={updated => setRows(current => current?.map((r, index) => index === i ? updated : r) || null)} />)}</div>
             </> : <>
                 <div className="form-grid"><Pick label="Club campus" value={branch} onChange={setBranch} options={data.branches.map(b => ({ value: b.id, label: b.name }))} /><Pick label="Club module" value={module} onChange={v => setModule(v as Module)} options={[{ value: '', label: 'Choose module' }, ...MODULES.map(m => ({ value: m, label: display(m) }))]} /><Field label="Session date" type="date" required value={date} onChange={setDate} /></div>
-                <div className="field club-paste"><label htmlFor="club-sheet-text">Names and batches</label><Textarea id="club-sheet-text" rows={7} value={text} onChange={e => setText(e.target.value)} placeholder={'Ayesha Rahman | HICU-301\nFarhan Ahmed | 299'} /><p className="help">One Name | Batch per line, or a JSON array with name and batch fields. First names and batch formats such as PRE-122, 122 (PRE), and 122 are supported. Check the full name before saving.</p></div>
+                <div className="field club-paste"><label htmlFor="club-sheet-text">Names and batches</label><Textarea id="club-sheet-text" rows={7} value={text} onChange={e => setText(e.target.value)} placeholder={'Ayesha Rahman | HICU-301\nFarhan Ahmed | 299'} /><p className="help">One Name | Batch per line, or a JSON array with name and batch fields. Short names, reordered names and varied batch formats are supported. For spelling differences, choose a suggested student. You can search or correct each row before saving.</p></div>
                 <label className="club-file-label">Or open a text / JSON file<input type="file" accept=".txt,.json,text/plain,application/json" onChange={async e => {
                     const file = e.target.files?.[0]; e.target.value = ''; if (!file) return;
                     setError(''); setBusy(true);
@@ -119,4 +119,25 @@ function ClubImportDialog({ data, demo, initialBranch, initialDate, onClose, onS
             <div className="form-actions"><Button type="button" variant="outline" disabled={busy} onClick={() => rows ? (setRows(null), setError('')) : onClose()}>{rows ? 'Back to text' : 'Cancel'}</Button><Button type="submit" disabled={busy || !!rows && (selection.unresolved > 0 || selection.ids.length === 0)}>{busy ? 'Please wait…' : rows ? `Save ${selection.ids.length} ${selection.ids.length === 1 ? 'student' : 'students'}` : 'Check matches'}</Button></div>
         </form>
     </DialogContent></Dialog>;
+}
+
+function ClubMatchEditor({ row, index, roster, onChange }: { row: ClubMatch; index: number; roster: ClubRosterRow[]; onChange: (row: ClubMatch) => void }) {
+    const [search, setSearch] = useState('');
+    const [editing, setEditing] = useState(false);
+    const [name, setName] = useState(row.name), [batch, setBatch] = useState(row.batch);
+    const selected = roster.find(r => r.enrollment_id === row.enrollmentId);
+    const query = search.normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+    const visible = roster.filter(r => r.enrollment_id === row.enrollmentId || query.every(word => `${r.full_name} ${r.batch_code} ${r.course_code} ${r.student_code}`.toLocaleLowerCase().includes(word)));
+    const choose = (id: string) => onChange({ ...row, enrollmentId: id, reason: id ? 'Selected manually' : 'Choose the student' });
+    return <div className={`club-match-row ${!row.enrollmentId ? 'club-needs-match' : ''}`}>
+        <div><strong>{index + 1}. {row.name || 'Unreadable name'}</strong><small>Sheet batch: {row.batch || 'Unreadable'} · {row.enrollmentId === '__skip' ? 'Skipped' : row.reason}</small></div>
+        {selected && <p><strong>{selected.full_name}</strong> · {selected.batch_code} · {selected.student_code}</p>}
+        {!row.enrollmentId && !!row.suggestions?.length && <div><p className="help">Suggested students — choose one to confirm:</p>{row.suggestions.map(suggestion => {
+            const student = roster.find(r => r.enrollment_id === suggestion.enrollmentId);
+            return student ? <div key={student.enrollment_id}><Button type="button" variant="outline" className="h-auto whitespace-normal text-left" onClick={() => choose(student.enrollment_id)}>{student.full_name} · {student.batch_code} · {student.student_code} · {student.enrollment_date}</Button><p className="help">{suggestion.reason}</p></div> : null;
+        })}</div>}
+        <Field label={`Search students for row ${index + 1}`} value={search} onChange={setSearch} placeholder="Name, batch or student ID" />
+        <Pick label={`Match row ${index + 1}`} value={row.enrollmentId} onChange={choose} options={[{ value: '', label: 'Choose student' }, { value: '__skip', label: 'Skip this row' }, ...visible.map(r => ({ value: r.enrollment_id, label: `${r.full_name} · ${r.batch_code} · ${r.student_code} · ${r.enrollment_date}` }))]} />
+        {editing ? <div><Field label={`Sheet name for row ${index + 1}`} value={name} onChange={setName} /><Field label={`Sheet batch for row ${index + 1}`} value={batch} onChange={setBatch} /><Button type="button" variant="outline" onClick={() => { onChange(matchClubRows([{ name, batch }], roster)[0]); setEditing(false); }}>Recheck this row</Button></div> : <Button type="button" variant="ghost" onClick={() => { setName(row.name); setBatch(row.batch); setEditing(true); }}>Edit sheet name or batch</Button>}
+    </div>;
 }
