@@ -23,7 +23,7 @@ assert.deepEqual(clubSelection(matches, roster), { ids: ['e1', 'e4'], unresolved
 matches[1].enrollmentId = 'e2'; matches[3].enrollmentId = '__skip';
 assert.deepEqual(clubSelection(matches, roster), { ids: ['e1', 'e2', 'e4'], unresolved: 0, skipped: 1, duplicates: 1 });
 assert.equal(matchClubRows([{ name: 'Ayesha Rahman', batch: 'CD-301' }], roster)[0].enrollmentId, 'e3');
-assert.equal(matchClubRows([{ name: 'Farhan Ahmed', batch: '301' }], roster)[0].enrollmentId, '', 'Do not guess a partially matching name.');
+assert.equal(matchClubRows([{ name: 'Farhan Ahmed', batch: '301' }], roster)[0].enrollmentId, 'e1', 'A unique shortened name in the batch is supported.');
 assert.equal(matchClubRows([{ name: 'Ayesha Rahman?', batch: 'CD-301' }], roster)[0].enrollmentId, '');
 assert.equal(matchClubRows([{ name: 'Ayesha Rahman', batch: 'CD-301?' }], roster)[0].enrollmentId, '');
 assert.equal(matchClubRows([{ name: '', batch: '301' }], roster)[0].enrollmentId, '');
@@ -35,3 +35,28 @@ assert.equal(validClubDate('2026-02-30'), false);
 assert.equal(validClubDate('2100-01-01'), false);
 assert.equal(validClubDate('2026-01-01'), true);
 console.log('PASS: Club text/JSON parsing, Bengali digits, exact matching, uncertain names, same-name ambiguity, repeated students, explicit skips and calendar dates.');
+
+const preRoster = [
+  { ...base, enrollment_id: 'p1', student_id: 'ps1', full_name: 'Rafi Ahmed', batch_code: 'PRE-122', course_code: 'PRE' },
+  { ...base, enrollment_id: 'p2', student_id: 'ps2', full_name: 'Rafi Hasan', batch_code: 'REG-122', course_code: 'REG', batch_id: 'b2' },
+];
+const match = (name, batch, list = preRoster) => matchClubRows([{ name, batch }], list)[0];
+for (const batch of ['PRE-122', '122 (pre)', 'pre 122', '122pre', 'PRE / ১২২', 'Batch 122 PRE', 'PRE_122']) {
+  assert.equal(match('Rafi', batch).enrollmentId, 'p1', batch);
+}
+assert.equal(match('Rafi', '122').enrollmentId, '', 'Number-only batch cannot resolve two Rafis across courses.');
+assert.equal(match('Rafi Ahmed', '122').enrollmentId, 'p1');
+assert.equal(match('Rafi', 'XYZ-122').enrollmentId, '', 'Do not ignore an explicit unknown prefix.');
+assert.equal(match('Raf', 'PRE-122').enrollmentId, '', 'No substring or spelling guesses.');
+assert.equal(match('Rafi', 'PRE-12-2').enrollmentId, '', 'Distinct number groups must not collapse.');
+assert.equal(match('Rafi', 'PRE').enrollmentId, '', 'A course alone is not a batch.');
+assert.equal(match('Rafi', 'PRE-122', [...preRoster, { ...preRoster[0], full_name: 'Rafi Islam', enrollment_id: 'p3', student_id: 'ps3' }]).enrollmentId, '');
+assert.equal(match('Rafi', 'PRE-122', [...preRoster, { ...preRoster[0], full_name: 'Rafi', enrollment_id: 'p3', student_id: 'ps3' }]).enrollmentId, '', 'An exact short name must not hide another possible student.');
+assert.equal(match('Rafi', '122 (pre)', [{ ...preRoster[0], batch_code: '122' }]).enrollmentId, 'p1', 'Course prefix can come from the course field.');
+assert.equal(match('Rafi', 'PRE-122', [{ ...preRoster[0], batch_code: '122 (PRE)' }]).enrollmentId, 'p1', 'Stored batch codes normalize too.');
+assert.equal(matchClubRows([{ name: 'Farhan', batch: '301' }], roster)[0].enrollmentId, 'e1');
+assert.equal(matchClubRows([{ name: 'Md.', batch: '301' }], roster)[0].enrollmentId, '');
+assert.equal(matchClubRows([{ name: 'রাফি', batch: '৩০২' }], roster)[0].enrollmentId, 'e4');
+assert.equal(match('Rafi', 'PRE-122', [...preRoster, { ...preRoster[0], enrollment_id: 'p3' }]).enrollmentId, '', 'Multiple enrollments need an explicit choice.');
+assert.match(match('Rafi', 'PRE-122').reason, /Short name/);
+console.log('PASS: Short names, reordered batch codes, explicit prefixes, Bengali names/digits, and ambiguous enrollments.');

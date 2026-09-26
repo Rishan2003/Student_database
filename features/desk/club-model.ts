@@ -22,7 +22,26 @@ export const previousDay = (date = today()) => new Date(Date.parse(date + 'T12:0
 export const validClubDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && !isNaN(Date.parse(date)) && new Date(date + 'T12:00:00Z').toISOString().slice(0, 10) === date && date <= today();
 const digits = (s: string) => s.normalize('NFKC').replace(/[০-৯]/g, c => String('০১২৩৪৫৬৭৮৯'.indexOf(c)));
 const nameKey = (s: string) => digits(s).toLocaleLowerCase().replace(/[\p{P}\p{S}]/gu, ' ').replace(/\s+/g, ' ').trim();
-const batchKey = (s: string) => digits(s).toLocaleLowerCase().replace(/\bbatch\b/g, '').replace(/[^\p{L}\p{N}]/gu, '');
+// Keep the course letters and number groups distinct, regardless of whether
+// the course is written before or after the number. Never discard a prefix.
+const batchParts = (s: string) => {
+    const tokens = digits(s).toLocaleLowerCase().replace(/\bbatch\b/g, '').match(/[\p{L}\p{M}]+|\d+/gu) || [];
+    return { course: tokens.filter(t => !/^\d+$/.test(t)).join(''), numbers: tokens.filter(t => /^\d+$/.test(t)).join(':') };
+};
+function sameBatch(input: ReturnType<typeof batchParts>, code: string) {
+    const candidate = batchParts(code);
+    return !!input.numbers && input.numbers === candidate.numbers && (!input.course || input.course === candidate.course);
+}
+function nameMatches(input: string, fullName: string) {
+    if (!input) return false;
+    const full = nameKey(fullName);
+    if (input === full) return true;
+    // Whole consecutive words allow first/short names, without matching e.g.
+    // “Ali” to “Alim”. A common title alone cannot identify a student.
+    const words = input.split(' ');
+    if (!words.some(w => !['md', 'mohammad', 'mohammed', 'muhammad', 'mr', 'mrs', 'ms', 'মো', 'মোহাম্মদ'].includes(w) && [...w].length > 1)) return false;
+    return (' ' + full + ' ').includes(' ' + input + ' ');
+}
 
 export const CLUB_AI_PROMPT = `Read this club attendance sheet. Transcribe every student row in the same order. Return ONLY a JSON array in this format:
 [{"name":"Student full name","batch":"Batch code or number"}]
@@ -62,11 +81,10 @@ export function parseClubText(input: string): ClubInputRow[] {
 export function matchClubRows(rows: ClubInputRow[], roster: ClubRosterRow[]): ClubMatch[] {
     return rows.map(row => {
         if (/[?\[\]]/.test(row.name + row.batch) || /\b(unclear|unreadable)\b/i.test(row.name + ' ' + row.batch)) return { ...row, enrollmentId: '', reason: 'Unclear text — choose the student' };
-        const name = nameKey(row.name), batch = batchKey(row.batch);
-        const batches = roster.filter(r => batch && (batchKey(r.batch_code) === batch || batchKey(r.course_code + ' ' + r.batch_code) === batch ||
-            /^\d+$/.test(batch) && digits(r.batch_code).match(/\d+\s*$/)?.[0].trim() === batch));
-        const matches = batches.filter(r => name && nameKey(r.full_name) === name);
-        return { ...row, enrollmentId: matches.length === 1 ? matches[0].enrollment_id : '', reason: matches.length === 1 ? 'Matched' : matches.length > 1 ? 'More than one match — choose the student' : !batches.length ? 'Batch not matched — choose the student' : 'Name not matched — choose the student' };
+        const name = nameKey(row.name), batch = batchParts(row.batch);
+        const batches = roster.filter(r => sameBatch(batch, r.batch_code) || sameBatch(batch, r.course_code + ' ' + r.batch_code));
+        const matches = batches.filter(r => nameMatches(name, r.full_name));
+        return { ...row, enrollmentId: matches.length === 1 ? matches[0].enrollment_id : '', reason: matches.length === 1 ? (nameKey(matches[0].full_name) === name ? 'Matched' : 'Short name matched — check full name') : matches.length > 1 ? 'More than one match — choose the student' : !batches.length ? 'Batch not matched — choose the student' : 'Name not matched — choose the student' };
     });
 }
 

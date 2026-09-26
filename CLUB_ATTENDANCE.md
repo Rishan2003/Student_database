@@ -2,7 +2,7 @@
 
 ## After each club
 
-1. Take a clear photo of the attendance sheet. Include the full student names and batch numbers.
+1. Take a clear photo of the attendance sheet. Include the names as written and batch numbers.
 2. Open **Club attendance → Import club sheet → Get text from a sheet photo**. Copy the AI prompt, attach the photo to your preferred AI, and ask it to extract the sheet.
 3. In the app, choose the **campus, module and session date**. Paste the extracted text, or open a `.txt` / `.json` file.
 4. Select **Check matches**. Check names against the original sheet. For an unclear row, choose the correct student from the list or explicitly choose **Skip this row**. Student codes and enrollment dates help distinguish matching names.
@@ -37,7 +37,8 @@ Attendance follows the student: a student enrolled in two batches appears as att
 
 ## Checking and correcting
 
-- The app automatically matches only a unique name-and-batch pair. It does not guess misspelled, partial or unclear names.
+- The app automatically matches only a unique name-and-batch pair. First names and consecutive parts of a full name are accepted only when exactly one enrollment matches. Check the displayed full name before saving. Misspellings and unclear text require a manual choice.
+- Batch variations such as `PRE-122`, `122 (PRE)`, `pre 122`, and `122` are accepted. Explicit course prefixes are respected; a number alone may require a manual choice across courses.
 - If two students have the same name and batch number, select the correct student using their full batch code and permanent student code. Check with staff when necessary.
 - A skipped row is not saved. You can resolve it and import it later.
 - Re-importing the same sheet is safe: each student is counted once per campus, module and day. Additional sheets add attendees without replacing earlier entries.
